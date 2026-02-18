@@ -8,8 +8,13 @@ public enum MinimapShape  { Rectangle, Circle }
 /// <summary>
 /// Overhead Terrain Minimap — Unity 2017 / C# 4.0 / ModTool compatible
 ///
-/// NEW: Terrain boundary clamping - camera never shows areas outside terrain bounds
-/// This prevents gray/black areas from appearing on the minimap
+/// POST-PROCESSING SETUP:
+/// 1. Place MinimapPostProcess.shader in your Assets folder
+/// 2. Create a Material: Right-click in Assets > Create > Material
+/// 3. Name it "MinimapPostProcessMat"
+/// 4. In the Material Inspector, set Shader dropdown to: Custom/MinimapPostProcess
+/// 5. Drag this Material into the "postProcessMaterial" field on this script
+/// 6. Enable usePostProcessing and adjust exposure/gamma
 /// </summary>
 public class OverheadMinimap : ModBehaviour
 {
@@ -24,37 +29,79 @@ public class OverheadMinimap : ModBehaviour
     public GameObject minimapCameraHost;
 
     // -------------------------------------------------------------------------
+    //  POST-PROCESSING (Recommended for dark terrains)
+    // -------------------------------------------------------------------------
+    [Header("--- Post-Processing (Brightens minimap only) ---")]
+    [Tooltip("Enable post-processing to brighten the minimap without affecting the main scene.")]
+    public bool usePostProcessing = true;
+
+    [Tooltip("REQUIRED: Material with MinimapPostProcess shader. Create Material > Set shader to Custom/MinimapPostProcess.")]
+    public Material postProcessMaterial;
+
+    [Tooltip("Exposure multiplier. Higher = brighter minimap. Try 2-4 for dark terrain.")]
+    [Range(0.5f, 8.0f)]
+    public float exposure = 2.5f;
+
+    [Tooltip("Gamma correction. Lower = brighter shadows. Try 0.6-0.8.")]
+    [Range(0.3f, 2.0f)]
+    public float gamma = 0.7f;
+
+    // -------------------------------------------------------------------------
+    //  MINIMAP LIGHTING (Optional)
+    // -------------------------------------------------------------------------
+    [Header("--- Minimap Lighting (Optional) ---")]
+    public bool useMinimapLight = false;
+
+    [Range(0f, 5.0f)]
+    public float lightIntensity = 2.0f;
+
+    public Color lightColor = Color.white;
+    public bool useLayerIsolation = false;
+
+    [Range(0, 31)]
+    public int minimapLightLayer = 31;
+
+    // -------------------------------------------------------------------------
+    //  TOPOGRAPHIC LINES
+    // -------------------------------------------------------------------------
+    [Header("--- Topographic Contours ---")]
+    public bool showTopographicLines = false;
+
+    [Range(5f, 100f)]
+    public float contourInterval = 25f;
+
+    public Color contourColor = new Color(0f, 0f, 0f, 0.5f);
+
+    [Range(1f, 5f)]
+    public float contourThickness = 1.5f;
+
+    [Range(256, 2048)]
+    public int contourTextureResolution = 512;
+
+    // -------------------------------------------------------------------------
     //  VISUAL ENHANCEMENTS
     // -------------------------------------------------------------------------
     [Header("--- Visual Enhancements ---")]
-    [Tooltip("Brightness multiplier. Try 3-5 for dark terrain.")]
     [Range(0.5f, 10.0f)]
-    public float brightness = 3.0f;
+    public float brightness = 1.5f;
 
-    [Tooltip("Ambient brightness - lightens camera background.")]
     [Range(0f, 1f)]
     public float ambientBrightness = 0.3f;
 
-    [Tooltip("Contrast adjustment.")]
     [Range(0.5f, 2.0f)]
     public float contrast = 1.2f;
 
-    [Tooltip("Color saturation.")]
     [Range(0f, 2.0f)]
     public float saturation = 1.0f;
 
-    [Tooltip("Tint color.")]
     public Color tintColor = Color.white;
 
     // -------------------------------------------------------------------------
     //  TERRAIN BOUNDARIES
     // -------------------------------------------------------------------------
     [Header("--- Terrain Boundaries ---")]
-    [Tooltip("Clamp camera to terrain bounds to prevent showing gray areas outside terrain. " +
-             "Automatically enabled if terrain is found.")]
     public bool clampToTerrainBounds = true;
 
-    [Tooltip("Extra padding inside terrain edges (in world units). Increase if edges still show.")]
     [Range(0f, 100f)]
     public float boundaryPadding = 10f;
 
@@ -62,50 +109,32 @@ public class OverheadMinimap : ModBehaviour
     //  DEBUG
     // -------------------------------------------------------------------------
     [Header("--- Debug ---")]
-    [Tooltip("Enable detailed logging.")]
-    public bool debugMode = false;
-
-    [Tooltip("Manually position camera.")]
+    public bool debugMode = true;
     public bool useManualPosition = false;
-
-    [Tooltip("Manual camera position.")]
     public Vector3 manualCameraPosition = new Vector3(0f, 300f, 0f);
 
     // -------------------------------------------------------------------------
     //  CAMERA CONFIGURATION
     // -------------------------------------------------------------------------
     [Header("--- Camera Configuration ---")]
-    [Tooltip("Which layers to render. -1 = Everything.")]
     public LayerMask minimapCullingMask = -1;
-
-    [Tooltip("Near clip plane.")]
     public float cameraNearClip = 0.3f;
-
-    [Tooltip("Far clip plane.")]
     public float cameraFarClip = 5000f;
-
-    [Tooltip("Camera render depth.")]
     public float cameraDepth = -2f;
 
     // -------------------------------------------------------------------------
     //  PLAYER TRACKING
     // -------------------------------------------------------------------------
     [Header("--- Player Tracking ---")]
-    [Tooltip("Player GameObject name.")]
     public string playerObjectName = "Player_Human";
-
-    [Tooltip("Height above player.")]
     public float cameraHeight = 300f;
 
-    [Tooltip("Orthographic size - how much terrain is visible. REDUCED from 1227!")]
     [Range(10f, 2000f)]
     public float orthographicSize = 150f;
 
-    [Tooltip("Camera follow smoothing.")]
     [Range(0f, 20f)]
     public float cameraFollowSmoothing = 0f;
 
-    [Tooltip("Lock camera Y to cameraHeight.")]
     public bool absoluteHeight = true;
 
     // -------------------------------------------------------------------------
@@ -113,9 +142,7 @@ public class OverheadMinimap : ModBehaviour
     // -------------------------------------------------------------------------
     [Header("--- Screen Position and Size ---")]
     public ScreenCorner anchor = ScreenCorner.TopRight;
-
     public Vector2 margin = new Vector2(10f, 10f);
-
     public Vector2 customPosition = new Vector2(10f, 10f);
 
     [Range(64f, 512f)]
@@ -146,7 +173,6 @@ public class OverheadMinimap : ModBehaviour
     // -------------------------------------------------------------------------
     [Header("--- Player Indicator ---")]
     public bool showPlayerIndicator = true;
-
     public Color playerIndicatorColor = Color.cyan;
 
     [Range(8f, 32f)]
@@ -160,7 +186,6 @@ public class OverheadMinimap : ModBehaviour
     public float minimapAlpha = 0.85f;
 
     public bool hideMap = false;
-
     public KeyCode toggleKey = KeyCode.M;
 
     // -------------------------------------------------------------------------
@@ -168,11 +193,8 @@ public class OverheadMinimap : ModBehaviour
     // -------------------------------------------------------------------------
     [Header("--- Runtime Zoom ---")]
     public bool allowZoom = true;
-
     public KeyCode zoomInKey = KeyCode.Equals;
-
     public KeyCode zoomOutKey = KeyCode.Minus;
-
     public float zoomStep = 20f;
 
     [Range(10f, 2000f)]
@@ -192,25 +214,33 @@ public class OverheadMinimap : ModBehaviour
     // -------------------------------------------------------------------------
     [Header("--- Compass Label ---")]
     public bool showCompassLabel = true;
-
     public string compassLabelText = "N";
-
     public Color compassLabelColor = Color.white;
 
     // -------------------------------------------------------------------------
     //  PRIVATE STATE
     // -------------------------------------------------------------------------
     private Camera    _minimapCamera;
+    private Light     _minimapLight;
     private Transform _playerTransform;
     private bool      _visible           = true;
     private float     _currentOrthoSize;
     private bool      _cameraCreated     = false;
+
+    // Post-processing
+    private RenderTexture _processedTexture;
+    private bool          _postProcessingReady = false;
 
     // Terrain boundary data
     private bool      _terrainBoundsKnown = false;
     private Vector3   _terrainMin;
     private Vector3   _terrainMax;
     private Vector3   _terrainCenter;
+    private Terrain   _terrain;
+
+    // Topographic contour data
+    private Texture2D _contourTexture;
+    private bool      _contourTextureReady = false;
 
     private Texture2D _borderTex;
     private Texture2D _arrowTex;
@@ -263,8 +293,26 @@ public class OverheadMinimap : ModBehaviour
         // Point straight down
         minimapCameraHost.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
 
+        // Setup post-processing
+        if (usePostProcessing)
+        {
+            SetupPostProcessing();
+        }
+
+        // Add minimap light if enabled
+        if (useMinimapLight)
+        {
+            CreateMinimapLight();
+        }
+
         // Find and store terrain bounds
         FindTerrainBounds();
+
+        // Generate contour lines if enabled
+        if (showTopographicLines && _terrain != null)
+        {
+            GenerateContourTexture();
+        }
 
         // Position camera
         if (!useManualPosition)
@@ -277,13 +325,17 @@ public class OverheadMinimap : ModBehaviour
 
         if (debugMode)
         {
-            Debug.Log("========== MINIMAP DEBUG INFO ==========");
-            Debug.Log("[OverheadMinimap] Camera Position: " + minimapCameraHost.transform.position);
-            Debug.Log("[OverheadMinimap] Camera Rotation: " + minimapCameraHost.transform.rotation.eulerAngles);
-            Debug.Log("[OverheadMinimap] Orthographic Size: " + _minimapCamera.orthographicSize);
-            Debug.Log("[OverheadMinimap] Terrain Bounds: " + _terrainMin + " to " + _terrainMax);
-            Debug.Log("[OverheadMinimap] Clamping Enabled: " + clampToTerrainBounds);
-            Debug.Log("========================================");
+            Debug.Log("========== MINIMAP DEBUG ==========");
+            Debug.Log("[OverheadMinimap] Post-Processing: " + usePostProcessing + 
+                      " | Ready: " + _postProcessingReady);
+            if (usePostProcessing && postProcessMaterial != null)
+            {
+                Debug.Log("[OverheadMinimap] Material: " + postProcessMaterial.name);
+                Debug.Log("[OverheadMinimap] Shader: " + (postProcessMaterial.shader != null ? postProcessMaterial.shader.name : "NULL"));
+                Debug.Log("[OverheadMinimap] Shader valid: " + (postProcessMaterial.shader != null && postProcessMaterial.shader.isSupported));
+            }
+            Debug.Log("[OverheadMinimap] Processed RT: " + (_processedTexture != null ? "Created" : "NULL"));
+            Debug.Log("===================================");
         }
 
         // Find player
@@ -301,36 +353,189 @@ public class OverheadMinimap : ModBehaviour
     }
 
     // =========================================================================
+    //  SETUP POST-PROCESSING
+    // =========================================================================
+    private void SetupPostProcessing()
+    {
+        if (postProcessMaterial == null)
+        {
+            Debug.LogError("[OverheadMinimap] postProcessMaterial is not assigned! Post-processing disabled.");
+            usePostProcessing = false;
+            return;
+        }
+
+        // Check if shader is valid
+        if (postProcessMaterial.shader == null)
+        {
+            Debug.LogError("[OverheadMinimap] Material has no shader assigned! Post-processing disabled.");
+            usePostProcessing = false;
+            return;
+        }
+
+        if (!postProcessMaterial.shader.isSupported)
+        {
+            Debug.LogError("[OverheadMinimap] Shader '" + postProcessMaterial.shader.name + 
+                           "' is not supported on this platform! Post-processing disabled.");
+            usePostProcessing = false;
+            return;
+        }
+
+        // Create processed texture (same size as input)
+        _processedTexture = new RenderTexture(
+            minimapTexture.width,
+            minimapTexture.height,
+            0,
+            RenderTextureFormat.ARGB32);
+
+        _processedTexture.Create();
+
+        _postProcessingReady = true;
+
+        Debug.Log("[OverheadMinimap] Post-processing initialized successfully with shader: " + 
+                  postProcessMaterial.shader.name);
+    }
+
+    // =========================================================================
+    //  CREATE MINIMAP LIGHT
+    // =========================================================================
+    private void CreateMinimapLight()
+    {
+        _minimapLight = AddComponent<Light>(minimapCameraHost);
+
+        if (_minimapLight == null)
+        {
+            Debug.LogError("[OverheadMinimap] Failed to create light.");
+            return;
+        }
+
+        _minimapLight.type      = LightType.Directional;
+        _minimapLight.intensity = lightIntensity;
+        _minimapLight.color     = lightColor;
+        _minimapLight.shadows   = LightShadows.None;
+
+        if (useLayerIsolation)
+            _minimapLight.cullingMask = 1 << minimapLightLayer;
+        else
+            _minimapLight.cullingMask = minimapCullingMask;
+    }
+
+    // =========================================================================
+    //  APPLY POST-PROCESSING
+    // =========================================================================
+    private void ApplyPostProcessing()
+    {
+        if (!_postProcessingReady || postProcessMaterial == null || _processedTexture == null)
+            return;
+
+        try
+        {
+            // Set shader properties
+            postProcessMaterial.SetFloat("_Exposure", exposure);
+            postProcessMaterial.SetFloat("_Gamma", gamma);
+
+            // Save current RenderTexture
+            RenderTexture previous = RenderTexture.active;
+
+            // Blit from raw minimap texture to processed texture with shader
+            Graphics.Blit(minimapTexture, _processedTexture, postProcessMaterial);
+
+            // Restore previous RenderTexture
+            RenderTexture.active = previous;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("[OverheadMinimap] Post-processing blit failed: " + e.Message);
+            _postProcessingReady = false;
+            usePostProcessing = false;
+        }
+    }
+
+    // =========================================================================
     //  FIND TERRAIN BOUNDS
     // =========================================================================
     private void FindTerrainBounds()
     {
-        Terrain terrain = Object.FindObjectOfType<Terrain>();
+        _terrain = Object.FindObjectOfType<Terrain>();
 
-        if (terrain != null)
+        if (_terrain != null)
         {
-            Vector3 terrainPos  = terrain.transform.position;
-            Vector3 terrainSize = terrain.terrainData.size;
+            Vector3 terrainPos  = _terrain.transform.position;
+            Vector3 terrainSize = _terrain.terrainData.size;
 
             _terrainMin = terrainPos;
             _terrainMax = terrainPos + terrainSize;
             _terrainCenter = terrainPos + (terrainSize * 0.5f);
             
             _terrainBoundsKnown = true;
-
-            if (debugMode)
-            {
-                Debug.Log("[OverheadMinimap] Terrain: " + terrain.name);
-                Debug.Log("[OverheadMinimap] Terrain Position: " + terrainPos);
-                Debug.Log("[OverheadMinimap] Terrain Size: " + terrainSize);
-                Debug.Log("[OverheadMinimap] Terrain Bounds: Min=" + _terrainMin + ", Max=" + _terrainMax);
-            }
         }
         else
         {
             _terrainBoundsKnown = false;
-            Debug.LogWarning("[OverheadMinimap] No Terrain found - boundary clamping disabled.");
         }
+    }
+
+    // =========================================================================
+    //  GENERATE CONTOUR TEXTURE
+    // =========================================================================
+    private void GenerateContourTexture()
+    {
+        if (_terrain == null) return;
+
+        int resolution = contourTextureResolution;
+        _contourTexture = new Texture2D(resolution, resolution, TextureFormat.ARGB32, false);
+
+        TerrainData terrainData = _terrain.terrainData;
+
+        for (int py = 0; py < resolution; py++)
+        {
+            for (int px = 0; px < resolution; px++)
+            {
+                float u = (float)px / (resolution - 1);
+                float v = (float)py / (resolution - 1);
+
+                float height = terrainData.GetInterpolatedHeight(u, v);
+
+                bool isContourLine = false;
+
+                int checkRadius = 1;
+                for (int dy = -checkRadius; dy <= checkRadius && !isContourLine; dy++)
+                {
+                    for (int dx = -checkRadius; dx <= checkRadius && !isContourLine; dx++)
+                    {
+                        if (dx == 0 && dy == 0) continue;
+
+                        int nx = px + dx;
+                        int ny = py + dy;
+
+                        if (nx >= 0 && nx < resolution && ny >= 0 && ny < resolution)
+                        {
+                            float nu = (float)nx / (resolution - 1);
+                            float nv = (float)ny / (resolution - 1);
+                            float neighborHeight = terrainData.GetInterpolatedHeight(nu, nv);
+
+                            float minH = Mathf.Min(height, neighborHeight);
+                            float maxH = Mathf.Max(height, neighborHeight);
+
+                            int minContour = Mathf.FloorToInt(minH / contourInterval);
+                            int maxContour = Mathf.FloorToInt(maxH / contourInterval);
+
+                            if (maxContour > minContour)
+                            {
+                                isContourLine = true;
+                            }
+                        }
+                    }
+                }
+
+                if (isContourLine)
+                    _contourTexture.SetPixel(px, py, contourColor);
+                else
+                    _contourTexture.SetPixel(px, py, Color.clear);
+            }
+        }
+
+        _contourTexture.Apply();
+        _contourTextureReady = true;
     }
 
     // =========================================================================
@@ -340,7 +545,6 @@ public class OverheadMinimap : ModBehaviour
     {
         if (_terrainBoundsKnown)
         {
-            // Start at terrain center
             minimapCameraHost.transform.position = new Vector3(
                 _terrainCenter.x,
                 _terrainMax.y + cameraHeight,
@@ -354,17 +558,14 @@ public class OverheadMinimap : ModBehaviour
 
     // =========================================================================
     //  CLAMP CAMERA TO TERRAIN BOUNDS
-    //  Prevents showing gray areas outside terrain
     // =========================================================================
     private Vector3 ClampCameraPosition(Vector3 desiredPos)
     {
         if (!clampToTerrainBounds || !_terrainBoundsKnown)
             return desiredPos;
 
-        // Calculate how much area the camera can see at current orthographic size
         float visibleRadius = _currentOrthoSize + boundaryPadding;
 
-        // Clamp X and Z so the camera never shows areas outside terrain bounds
         float clampedX = Mathf.Clamp(
             desiredPos.x,
             _terrainMin.x + visibleRadius,
@@ -398,11 +599,9 @@ public class OverheadMinimap : ModBehaviour
 
                 bool isArrow = false;
 
-                // Arrow head
                 if (y < -2f && Mathf.Abs(x) < (-y * 0.5f))
                     isArrow = true;
 
-                // Arrow shaft
                 if (y >= -2f && y < 8f && Mathf.Abs(x) < 3f)
                     isArrow = true;
 
@@ -423,6 +622,19 @@ public class OverheadMinimap : ModBehaviour
         // Update ambient brightness
         float ambientValue = ambientBrightness;
         _minimapCamera.backgroundColor = new Color(ambientValue, ambientValue, ambientValue);
+
+        // Update light if it exists
+        if (_minimapLight != null)
+        {
+            _minimapLight.intensity = lightIntensity;
+            _minimapLight.color     = lightColor;
+        }
+
+        // Regenerate contours if needed
+        if (showTopographicLines && !_contourTextureReady && _terrain != null)
+        {
+            GenerateContourTexture();
+        }
 
         // Find player
         if (_playerTransform == null)
@@ -448,7 +660,7 @@ public class OverheadMinimap : ModBehaviour
             _minimapCamera.orthographicSize = _currentOrthoSize;
         }
 
-        // Move camera (with boundary clamping)
+        // Move camera
         if (!useManualPosition && _playerTransform != null)
         {
             float targetY = absoluteHeight
@@ -460,7 +672,6 @@ public class OverheadMinimap : ModBehaviour
                 targetY,
                 _playerTransform.position.z);
 
-            // Clamp to terrain bounds
             Vector3 clampedPos = ClampCameraPosition(desiredPos);
 
             if (cameraFollowSmoothing <= 0f)
@@ -472,7 +683,6 @@ public class OverheadMinimap : ModBehaviour
                     Time.deltaTime * cameraFollowSmoothing);
         }
 
-        // Enforce rotation
         minimapCameraHost.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
     }
 
@@ -484,9 +694,12 @@ public class OverheadMinimap : ModBehaviour
         if (hideMap || !_visible || minimapTexture == null || _minimapCamera == null)
             return;
 
+        // Apply post-processing if enabled
+        if (usePostProcessing && _postProcessingReady)
+            ApplyPostProcessing();
+
         _mapRect = ComputeMapRect();
 
-        // Apply brightness
         Color enhancedColor = new Color(
             tintColor.r * brightness,
             tintColor.g * brightness,
@@ -510,33 +723,26 @@ public class OverheadMinimap : ModBehaviour
             GUIStyle debugStyle = new GUIStyle(GUI.skin.label);
             debugStyle.fontSize = 10;
             
-            Vector3 camPos = minimapCameraHost.transform.position;
-            string debugText = "Cam: (" + camPos.x.ToString("F0") + ", " + camPos.z.ToString("F0") + ")" +
-                               "\nOrtho: " + _currentOrthoSize.ToString("F0") +
-                               "\nBounds: " + clampToTerrainBounds;
+            string debugText = "PostProcess: " + usePostProcessing + " Ready: " + _postProcessingReady +
+                               "\nMaterial: " + (postProcessMaterial != null ? "OK" : "NULL") +
+                               "\nExposure: " + exposure.ToString("F1") + 
+                               " | Gamma: " + gamma.ToString("F2") +
+                               "\nDisplay: " + (GetDisplayTexture() == _processedTexture ? "Processed" : "Raw");
             
-            if (_playerTransform != null)
-            {
-                Vector3 pPos = _playerTransform.position;
-                debugText += "\nPlayer: (" + pPos.x.ToString("F0") + ", " + pPos.z.ToString("F0") + ")";
-                
-                // Show if player is near edge
-                if (_terrainBoundsKnown && clampToTerrainBounds)
-                {
-                    float distToEdge = Mathf.Min(
-                        pPos.x - _terrainMin.x,
-                        _terrainMax.x - pPos.x,
-                        pPos.z - _terrainMin.z,
-                        _terrainMax.z - pPos.z);
-                    
-                    if (distToEdge < _currentOrthoSize)
-                        debugText += "\n[NEAR EDGE]";
-                }
-            }
-            
-            GUI.Label(new Rect(_mapRect.x, _mapRect.yMax + 5f, 300f, 100f), debugText, debugStyle);
+            GUI.Label(new Rect(_mapRect.x, _mapRect.yMax + 5f, 300f, 80f), debugText, debugStyle);
             GUI.color = prevColor;
         }
+    }
+
+    // =========================================================================
+    //  GET DISPLAY TEXTURE
+    // =========================================================================
+    private RenderTexture GetDisplayTexture()
+    {
+        if (usePostProcessing && _postProcessingReady && _processedTexture != null)
+            return _processedTexture;
+        else
+            return minimapTexture;
     }
 
     // =========================================================================
@@ -552,7 +758,11 @@ public class OverheadMinimap : ModBehaviour
         if (rotateMapWithPlayer && _playerTransform != null)
             GUIUtility.RotateAroundPivot(-_playerTransform.eulerAngles.y, new Vector2(cx, cy));
 
-        GUI.DrawTexture(_mapRect, minimapTexture, ScaleMode.StretchToFill);
+        RenderTexture displayTex = GetDisplayTexture();
+        GUI.DrawTexture(_mapRect, displayTex, ScaleMode.StretchToFill);
+
+        if (showTopographicLines && _contourTextureReady)
+            DrawContourOverlay();
 
         if (showBorder)          DrawBorderRect(_mapRect);
         if (showPlayerIndicator) DrawPlayerArrow();
@@ -571,7 +781,11 @@ public class OverheadMinimap : ModBehaviour
         if (rotateMapWithPlayer && _playerTransform != null)
             GUIUtility.RotateAroundPivot(-_playerTransform.eulerAngles.y, new Vector2(cx, cy));
 
-        GUI.DrawTexture(_mapRect, minimapTexture, ScaleMode.StretchToFill);
+        RenderTexture displayTex = GetDisplayTexture();
+        GUI.DrawTexture(_mapRect, displayTex, ScaleMode.StretchToFill);
+
+        if (showTopographicLines && _contourTextureReady)
+            DrawContourOverlay();
 
         if (_maskTex != null)
         {
@@ -586,6 +800,39 @@ public class OverheadMinimap : ModBehaviour
         if (showCompassLabel)    DrawCompassLabel();
 
         GUI.matrix = prevMatrix;
+    }
+
+    // =========================================================================
+    //  DRAW CONTOUR OVERLAY
+    // =========================================================================
+    private void DrawContourOverlay()
+    {
+        if (_contourTexture == null || !_terrainBoundsKnown) return;
+
+        Vector3 camPos = minimapCameraHost.transform.position;
+        float visibleSize = _currentOrthoSize * 2f;
+        
+        float terrainWidth  = _terrainMax.x - _terrainMin.x;
+        float terrainDepth  = _terrainMax.z - _terrainMin.z;
+        
+        float centerU = (camPos.x - _terrainMin.x) / terrainWidth;
+        float centerV = (camPos.z - _terrainMin.z) / terrainDepth;
+        
+        float sizeU = visibleSize / terrainWidth;
+        float sizeV = visibleSize / terrainDepth;
+        
+        Rect sourceRect = new Rect(
+            centerU - sizeU * 0.5f,
+            centerV - sizeV * 0.5f,
+            sizeU,
+            sizeV);
+
+        Color prev = GUI.color;
+        GUI.color = new Color(1f, 1f, 1f, contourColor.a * minimapAlpha);
+        
+        GUI.DrawTextureWithTexCoords(_mapRect, _contourTexture, sourceRect);
+        
+        GUI.color = prev;
     }
 
     private void DrawBorderRect(Rect r)
@@ -719,6 +966,15 @@ public class OverheadMinimap : ModBehaviour
     {
         if (_minimapCamera != null)
             Destroy(_minimapCamera);
+
+        if (_minimapLight != null)
+            Destroy(_minimapLight);
+
+        if (_processedTexture != null)
+            Destroy(_processedTexture);
+
+        if (_contourTexture != null)
+            Destroy(_contourTexture);
 
         if (_borderTex != null) Destroy(_borderTex);
         if (_arrowTex  != null) Destroy(_arrowTex);
