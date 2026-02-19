@@ -8,13 +8,11 @@ public enum MinimapShape  { Rectangle, Circle }
 /// <summary>
 /// Overhead Terrain Minimap — Unity 2017 / C# 4.0 / ModTool compatible
 ///
-/// POST-PROCESSING SETUP:
-/// 1. Place MinimapPostProcess.shader in your Assets folder
-/// 2. Create a Material: Right-click in Assets > Create > Material
-/// 3. Name it "MinimapPostProcessMat"
-/// 4. In the Material Inspector, set Shader dropdown to: Custom/MinimapPostProcess
-/// 5. Drag this Material into the "postProcessMaterial" field on this script
-/// 6. Enable usePostProcessing and adjust exposure/gamma
+/// FEATURES:
+/// - Post-processing to brighten dark terrain without affecting scene lighting
+/// - Accurate player positioning even when camera is clamped to terrain edges
+/// - Topographic contour lines
+/// - Terrain boundary clamping
 /// </summary>
 public class OverheadMinimap : ModBehaviour
 {
@@ -35,7 +33,7 @@ public class OverheadMinimap : ModBehaviour
     [Tooltip("Enable post-processing to brighten the minimap without affecting the main scene.")]
     public bool usePostProcessing = true;
 
-    [Tooltip("REQUIRED: Material with MinimapPostProcess shader. Create Material > Set shader to Custom/MinimapPostProcess.")]
+    [Tooltip("REQUIRED: Material with MinimapPostProcess shader.")]
     public Material postProcessMaterial;
 
     [Tooltip("Exposure multiplier. Higher = brighter minimap. Try 2-4 for dark terrain.")]
@@ -109,7 +107,7 @@ public class OverheadMinimap : ModBehaviour
     //  DEBUG
     // -------------------------------------------------------------------------
     [Header("--- Debug ---")]
-    public bool debugMode = true;
+    public bool debugMode = false;
     public bool useManualPosition = false;
     public Vector3 manualCameraPosition = new Vector3(0f, 300f, 0f);
 
@@ -226,6 +224,8 @@ public class OverheadMinimap : ModBehaviour
     private bool      _visible           = true;
     private float     _currentOrthoSize;
     private bool      _cameraCreated     = false;
+    private int       _frameCount        = 0;
+    private bool      _playerFoundLogged = false;
 
     // Post-processing
     private RenderTexture _processedTexture;
@@ -330,18 +330,13 @@ public class OverheadMinimap : ModBehaviour
                       " | Ready: " + _postProcessingReady);
             if (usePostProcessing && postProcessMaterial != null)
             {
-                Debug.Log("[OverheadMinimap] Material: " + postProcessMaterial.name);
-                Debug.Log("[OverheadMinimap] Shader: " + (postProcessMaterial.shader != null ? postProcessMaterial.shader.name : "NULL"));
-                Debug.Log("[OverheadMinimap] Shader valid: " + (postProcessMaterial.shader != null && postProcessMaterial.shader.isSupported));
+                Debug.Log("[OverheadMinimap] Shader: " + postProcessMaterial.shader.name);
             }
-            Debug.Log("[OverheadMinimap] Processed RT: " + (_processedTexture != null ? "Created" : "NULL"));
             Debug.Log("===================================");
         }
 
-        // Find player
-        GameObject playerGO = GameObject.Find(playerObjectName);
-        if (playerGO != null)
-            _playerTransform = playerGO.transform;
+        // Try to find player initially
+        TryFindPlayer();
 
         // Build textures
         _borderTex = new Texture2D(1, 1);
@@ -350,6 +345,28 @@ public class OverheadMinimap : ModBehaviour
 
         BuildArrowTexture();
         BuildCircleMask();
+    }
+
+    // =========================================================================
+    //  TRY FIND PLAYER
+    //  Only logs once when found, reducing spam
+    // =========================================================================
+    private void TryFindPlayer()
+    {
+        if (_playerTransform != null) return;
+
+        GameObject playerGO = GameObject.Find(playerObjectName);
+        if (playerGO != null)
+        {
+            _playerTransform = playerGO.transform;
+            
+            // Only log once when player is found
+            if (!_playerFoundLogged)
+            {
+                Debug.Log("[OverheadMinimap] Player found: " + playerObjectName);
+                _playerFoundLogged = true;
+            }
+        }
     }
 
     // =========================================================================
@@ -364,7 +381,6 @@ public class OverheadMinimap : ModBehaviour
             return;
         }
 
-        // Check if shader is valid
         if (postProcessMaterial.shader == null)
         {
             Debug.LogError("[OverheadMinimap] Material has no shader assigned! Post-processing disabled.");
@@ -374,13 +390,12 @@ public class OverheadMinimap : ModBehaviour
 
         if (!postProcessMaterial.shader.isSupported)
         {
-            Debug.LogError("[OverheadMinimap] Shader '" + postProcessMaterial.shader.name + 
-                           "' is not supported on this platform! Post-processing disabled.");
+            Debug.LogError("[OverheadMinimap] Shader not supported! Post-processing disabled.");
             usePostProcessing = false;
             return;
         }
 
-        // Create processed texture (same size as input)
+        // Create processed texture
         _processedTexture = new RenderTexture(
             minimapTexture.width,
             minimapTexture.height,
@@ -388,11 +403,9 @@ public class OverheadMinimap : ModBehaviour
             RenderTextureFormat.ARGB32);
 
         _processedTexture.Create();
-
         _postProcessingReady = true;
 
-        Debug.Log("[OverheadMinimap] Post-processing initialized successfully with shader: " + 
-                  postProcessMaterial.shader.name);
+        Debug.Log("[OverheadMinimap] Post-processing initialized.");
     }
 
     // =========================================================================
@@ -429,22 +442,16 @@ public class OverheadMinimap : ModBehaviour
 
         try
         {
-            // Set shader properties
             postProcessMaterial.SetFloat("_Exposure", exposure);
             postProcessMaterial.SetFloat("_Gamma", gamma);
 
-            // Save current RenderTexture
             RenderTexture previous = RenderTexture.active;
-
-            // Blit from raw minimap texture to processed texture with shader
             Graphics.Blit(minimapTexture, _processedTexture, postProcessMaterial);
-
-            // Restore previous RenderTexture
             RenderTexture.active = previous;
         }
         catch (System.Exception e)
         {
-            Debug.LogError("[OverheadMinimap] Post-processing blit failed: " + e.Message);
+            Debug.LogError("[OverheadMinimap] Post-processing failed: " + e.Message);
             _postProcessingReady = false;
             usePostProcessing = false;
         }
@@ -619,6 +626,8 @@ public class OverheadMinimap : ModBehaviour
     {
         if (!_cameraCreated || _minimapCamera == null) return;
 
+        _frameCount++;
+
         // Update ambient brightness
         float ambientValue = ambientBrightness;
         _minimapCamera.backgroundColor = new Color(ambientValue, ambientValue, ambientValue);
@@ -636,12 +645,10 @@ public class OverheadMinimap : ModBehaviour
             GenerateContourTexture();
         }
 
-        // Find player
-        if (_playerTransform == null)
+        // Try to find player every 30 frames
+        if (_frameCount % 30 == 0)
         {
-            GameObject playerGO = GameObject.Find(playerObjectName);
-            if (playerGO != null)
-                _playerTransform = playerGO.transform;
+            TryFindPlayer();
         }
 
         // Toggle visibility
@@ -723,11 +730,16 @@ public class OverheadMinimap : ModBehaviour
             GUIStyle debugStyle = new GUIStyle(GUI.skin.label);
             debugStyle.fontSize = 10;
             
-            string debugText = "PostProcess: " + usePostProcessing + " Ready: " + _postProcessingReady +
-                               "\nMaterial: " + (postProcessMaterial != null ? "OK" : "NULL") +
-                               "\nExposure: " + exposure.ToString("F1") + 
-                               " | Gamma: " + gamma.ToString("F2") +
-                               "\nDisplay: " + (GetDisplayTexture() == _processedTexture ? "Processed" : "Raw");
+            Vector3 camPos = minimapCameraHost.transform.position;
+            string debugText = "Cam: (" + camPos.x.ToString("F0") + ", " + camPos.z.ToString("F0") + ")";
+            
+            if (_playerTransform != null)
+            {
+                Vector3 pPos = _playerTransform.position;
+                debugText += "\nPlayer: (" + pPos.x.ToString("F0") + ", " + pPos.z.ToString("F0") + ")";
+                debugText += "\nOffset: (" + (pPos.x - camPos.x).ToString("F0") + ", " + 
+                             (pPos.z - camPos.z).ToString("F0") + ")";
+            }
             
             GUI.Label(new Rect(_mapRect.x, _mapRect.yMax + 5f, 300f, 80f), debugText, debugStyle);
             GUI.color = prevColor;
@@ -743,6 +755,37 @@ public class OverheadMinimap : ModBehaviour
             return _processedTexture;
         else
             return minimapTexture;
+    }
+
+    // =========================================================================
+    //  CALCULATE PLAYER POSITION ON MINIMAP
+    //  Returns the pixel position where the player should be drawn
+    // =========================================================================
+    private Vector2 CalculatePlayerMinimapPosition()
+    {
+        if (_playerTransform == null)
+            return new Vector2(_mapRect.x + _mapRect.width * 0.5f, _mapRect.y + _mapRect.height * 0.5f);
+
+        Vector3 camPos = minimapCameraHost.transform.position;
+        Vector3 playerPos = _playerTransform.position;
+
+        // Calculate offset from camera center
+        float offsetX = playerPos.x - camPos.x;
+        float offsetZ = playerPos.z - camPos.z;
+
+        // Normalize to -1 to 1 range based on orthographic size
+        float normalizedX = offsetX / _currentOrthoSize;
+        float normalizedZ = offsetZ / _currentOrthoSize;
+
+        // Clamp to ensure arrow stays within minimap bounds
+        normalizedX = Mathf.Clamp(normalizedX, -1f, 1f);
+        normalizedZ = Mathf.Clamp(normalizedZ, -1f, 1f);
+
+        // Convert to minimap pixel position
+        float pixelX = _mapRect.x + (_mapRect.width * 0.5f) + (normalizedX * _mapRect.width * 0.5f);
+        float pixelY = _mapRect.y + (_mapRect.height * 0.5f) - (normalizedZ * _mapRect.height * 0.5f);
+
+        return new Vector2(pixelX, pixelY);
     }
 
     // =========================================================================
@@ -857,10 +900,15 @@ public class OverheadMinimap : ModBehaviour
     {
         if (_playerTransform == null || _arrowTex == null) return;
 
+        // Calculate accurate player position on minimap
+        Vector2 playerScreenPos = CalculatePlayerMinimapPosition();
+
         float half = playerIndicatorSize * 0.5f;
-        float cx   = _mapRect.x + _mapRect.width  * 0.5f;
-        float cy   = _mapRect.y + _mapRect.height * 0.5f;
-        Rect  arrow = new Rect(cx - half, cy - half, playerIndicatorSize, playerIndicatorSize);
+        Rect  arrow = new Rect(
+            playerScreenPos.x - half, 
+            playerScreenPos.y - half, 
+            playerIndicatorSize, 
+            playerIndicatorSize);
 
         Color prev = GUI.color;
         GUI.color  = new Color(
@@ -872,7 +920,7 @@ public class OverheadMinimap : ModBehaviour
         Matrix4x4 prevMatrix = GUI.matrix;
 
         if (!rotateMapWithPlayer)
-            GUIUtility.RotateAroundPivot(_playerTransform.eulerAngles.y, new Vector2(cx, cy));
+            GUIUtility.RotateAroundPivot(_playerTransform.eulerAngles.y, playerScreenPos);
 
         GUI.DrawTexture(arrow, _arrowTex);
 
